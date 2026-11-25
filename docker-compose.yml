@@ -1,0 +1,16 @@
+services:
+  apkpatcher:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - apkpatcher-data:/data
+    environment:
+      MAX_JOBS: "1"          # عدد المعالجات المتزامنة
+      JOB_TIMEOUT: "1800"    # أقصى مدة لكل ملف (ثانية)
+      MAX_UPLOAD_MB: "2048"
+      JOB_TTL: "300"         # حذف الملف تلقائياً إن لم يُنزَّل خلال 5 دقائق
+    restart: unless-stopped
+
+volumes:
+  apkpatcher-data:

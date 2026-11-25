@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ApkPatcher</title>
+<style>
+  :root {
+    --bg: #e8ede6;
+    --panel: #f6f8f4;
+    --ink: #17261f;
+    --muted: #5b6b62;
+    --line: #c3cfc5;
+    --teal: #0e4a43;
+    --teal-ink: #f2f7f3;
+    --signal: #f0b429;
+    --err: #a4262c;
+    --ok: #1f7a4d;
+    --log-bg: #12201b;
+    --log-ink: #cfe3d6;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101a16; --panel: #17251f; --ink: #e3ede6; --muted: #92a69a;
+      --line: #2c4036; --teal: #3fb59f; --teal-ink: #0b1a15;
+      --log-bg: #0b1511; --log-ink: #bcd6c6; --err: #ff8a8f; --ok: #5fd39b;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 16px/1.7 "Segoe UI", Tahoma, "Noto Naskh Arabic", system-ui, sans-serif;
+    min-height: 100vh; padding: 32px 16px 64px;
+  }
+  main { max-width: 680px; margin: 0 auto; }
+  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: 0; }
+  header p { margin: 0 0 28px; color: var(--muted); }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+  h2 { font-size: 17px; margin: 0 0 12px; }
+
+  #drop {
+    display: block; border: 2px dashed var(--line); border-radius: 8px;
+    padding: 34px 16px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  #drop:hover, #drop:focus-within, #drop.over { border-color: var(--signal); background: color-mix(in srgb, var(--signal) 10%, transparent); }
+  #drop input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  #drop strong { display: block; font-size: 18px; }
+  #drop small { color: var(--muted); }
+  #picked { margin-top: 10px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; word-break: break-all; }
+
+  fieldset { border: 0; padding: 0; margin: 0 0 14px; }
+  legend { font-weight: 600; margin-bottom: 6px; padding: 0; }
+  .modes { display: grid; gap: 8px; }
+  .opt { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+  .opt:has(input:checked) { border-color: var(--teal); background: color-mix(in srgb, var(--teal) 8%, transparent); }
+  .opt input { margin-top: 7px; accent-color: var(--teal); }
+  .opt span small { display: block; color: var(--muted); font-size: 13px; line-height: 1.5; }
+  .addons { display: grid; gap: 6px; }
+  .addons.off { opacity: .45; pointer-events: none; }
+  code { font-family: ui-monospace, Menlo, Consolas, monospace; direction: ltr; unicode-bidi: embed; font-size: 13px; }
+  label.file { display: block; margin-top: 6px; }
+  label.file input { display: block; margin-top: 4px; max-width: 100%; }
+  details summary { cursor: pointer; font-weight: 600; margin-bottom: 10px; }
+
+  button {
+    font: inherit; font-weight: 600; cursor: pointer; border: 0; border-radius: 8px;
+    padding: 12px 22px; background: var(--teal); color: var(--teal-ink);
+  }
+  button:focus-visible, a.btn:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  a.btn { display: inline-block; text-decoration: none; font-weight: 600; border-radius: 8px; padding: 12px 22px; background: var(--signal); color: #231a00; }
+
+  #result[hidden] { display: none; }
+  .bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin: 10px 0; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--teal); transition: width .2s; }
+  .bar.busy i { width: 40%; animation: slide 1.4s ease-in-out infinite alternate; }
+  @keyframes slide { from { margin-inline-start: 0; } to { margin-inline-start: 60%; } }
+  @media (prefers-reduced-motion: reduce) { .bar.busy i { animation: none; width: 100%; opacity: .5; } }
+  #state { font-weight: 600; }
+  #state.error { color: var(--err); } #state.done { color: var(--ok); }
+  pre#log {
+    direction: ltr; text-align: left; background: var(--log-bg); color: var(--log-ink);
+    border-radius: 8px; padding: 12px; margin: 10px 0 0; max-height: 320px; overflow: auto;
+    font: 12.5px/1.5 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-all;
+  }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  bdi { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>ApkPatcher</h1>
+    <p>أرسل ملف التطبيق، اختر نوع المعالجة، ثم نزّل الناتج. يبقى اسم الملف كما هو.</p>
+    <p style="color:var(--muted);font-size:14px;margin-top:-18px">🔒 يُحذف الملف من الاستضافة تلقائياً فور تنزيله، أو خلال 5 دقائق إن لم يُنزَّل.</p>
+  </header>
+
+  <form id="form">
+    <section>
+      <h2>الملف</h2>
+      <label id="drop">
+        <input type="file" id="apk" name="apk" accept=".apk,.apks,.apkm,.xapk" required>
+        <strong>اسحب الملف هنا أو اضغط للاختيار</strong>
+        <small>apk · apks · apkm · xapk</small>
+        <div id="picked" dir="ltr"></div>
+      </label>
+    </section>
+
+    <section>
+      <h2>نوع المعالجة</h2>
+      <fieldset class="modes">
+        <label class="opt"><input type="radio" name="mode" value="default" checked>
+          <span>الافتراضي: تجاوز VPN وSSL<small>يمكن إضافة خيارات إضافية أدناه.</small></span></label>
+        <label class="opt"><input type="radio" name="mode" value="ads">
+          <span>إزالة الإعلانات<small>يعمل بدل المعالجة الافتراضية (هكذا تعمل الأداة).</small></span></label>
+        <label class="opt"><input type="radio" name="mode" value="info">
+          <span>معلومات جهاز وهمية<small>يعمل بدل المعالجة الافتراضية.</small></span></label>
+      </fieldset>
+
+      <fieldset id="addons" class="addons">
+        <legend>إضافات للوضع الافتراضي</legend>
+        <label class="opt"><input type="checkbox" name="flutter" value="1"><span>تطبيق Flutter <code>-f</code></span></label>
+        <label class="opt"><input type="checkbox" name="pairip" value="1"><span>تطبيق Pairip <code>-p</code><small>الناتج غير موقّع، للاستخدام في VM / Multi-App.</small></span></label>
+        <label class="opt"><input type="checkbox" name="no_screenshot_block" value="1"><span>السماح بلقطات الشاشة <code>-rmss</code></span></label>
+        <label class="opt"><input type="checkbox" name="no_usb_check" value="1"><span>تجاوز فحص USB Debugging <code>-rmusb</code></span></label>
+        <label class="opt"><input type="checkbox" name="spoof_pkg" value="1"><span>تمويه اسم الحزمة <code>-pkg</code></span></label>
+        <label class="file">شهادة CA مخصصة (اختياري) <code>-c</code>
+          <input type="file" name="cert" accept=".pem,.crt,.cer,.cert,.der"></label>
+      </fieldset>
+
+      <details>
+        <summary>إعدادات عامة</summary>
+        <div class="addons">
+          <label class="opt"><input type="checkbox" name="apkeditor" value="1"><span>استخدام APKEditor بدل APKTool <code>-a</code><small>جرّبه إذا فشل الفك أو إعادة البناء.</small></span></label>
+          <label class="opt"><input type="checkbox" name="unsigned" value="1"><span>إبقاء الناتج غير موقّع <code>-u</code></span></label>
+          <label class="opt"><input type="checkbox" name="emulator" value="1"><span>لمحاكي على الكمبيوتر <code>-e</code></span></label>
+          <label class="opt"><input type="checkbox" name="by_moon" value="1"><span>إظهار "by moon" عند فتح التطبيق <code>-moon</code><small>يُحقَن في شاشة الدخول الرئيسية فقط؛ تجريبي.</small></span></label>
+        </div>
+      </details>
+    </section>
+
+    <button type="submit" id="go">ابدأ المعالجة</button>
+  </form>
+
+  <section id="result" hidden style="margin-top:16px">
+    <div id="state">…</div>
+    <div class="bar" id="bar"><i></i></div>
+    <pre id="log" aria-live="polite"></pre>
+    <div class="actions">
+      <a class="btn" id="dl" hidden></a>
+      <button type="button" class="ghost" id="again" hidden>معالجة ملف آخر</button>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const form = $('#form'), apk = $('#apk'), drop = $('#drop');
+let jobId = null, timer = null;
+
+function syncMode() {
+  const m = form.mode.value;
+  $('#addons').classList.toggle('off', m !== 'default');
+}
+form.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', syncMode));
+
+function showPicked() {
+  $('#picked').textContent = apk.files[0] ? apk.files[0].name : '';
+}
+apk.addEventListener('change', showPicked);
+['dragenter','dragover'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', ev => {
+  if (ev.dataTransfer.files.length) { apk.files = ev.dataTransfer.files; showPicked(); }
+});
+
+function setState(text, cls) {
+  const s = $('#state'); s.textContent = text; s.className = cls || '';
+}
+
+form.addEventListener('submit', ev => {
+  ev.preventDefault();
+  if (!apk.files[0]) return;
+  const fd = new FormData(form);
+  if (form.mode.value !== 'default') fd.delete('cert');
+
+  $('#go').disabled = true;
+  $('#result').hidden = false;
+  $('#log').textContent = '';
+  $('#dl').hidden = true; $('#again').hidden = true;
+  $('#bar').classList.remove('busy'); $('#bar i').style.width = '0';
+  setState('جارٍ رفع الملف…');
+  $('#result').scrollIntoView({behavior: 'smooth'});
+
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/jobs');
+  xhr.upload.onprogress = e => {
+    if (e.lengthComputable) $('#bar i').style.width = (e.loaded / e.total * 100) + '%';
+  };
+  xhr.onload = () => {
+    let data = {};
+    try { data = JSON.parse(xhr.responseText); } catch (_) {}
+    if (xhr.status !== 201) return fail(data.error || ('خطأ ' + xhr.status));
+    jobId = data.id;
+    $('#bar').classList.add('busy');
+    setState('في الطابور بانتظار البدء…');
+    poll(0);
+  };
+  xhr.onerror = () => fail('تعذر الاتصال بالخادم.');
+  xhr.send(fd);
+});
+
+function fail(msg) {
+  setState(msg, 'error');
+  $('#bar').classList.remove('busy');
+  $('#again').hidden = false;
+}
+
+function poll(since) {
+  fetch(`/api/jobs/${jobId}?since=${since}`).then(r => r.ok ? r.json() : Promise.reject()).then(d => {
+    if (d.lines.length) {
+      const log = $('#log');
+      log.textContent += d.lines.join('\n') + '\n';
+      log.scrollTop = log.scrollHeight;
+    }
+    if (d.status === 'running') setState('جارٍ المعالجة… قد يستغرق ذلك عدة دقائق.');
+    if (d.status === 'done') {
+      $('#bar').classList.remove('busy'); $('#bar i').style.width = '100%';
+      setState('اكتملت المعالجة', 'done');
+      const a = $('#dl');
+      a.href = `/api/jobs/${jobId}/download`;
+      a.textContent = '';
+      const b = document.createElement('bdi'); b.textContent = d.output;
+      a.append('تنزيل ', b);
+      a.hidden = false; $('#again').hidden = false;
+      return;
+    }
+    if (d.status === 'error') return fail('فشلت المعالجة. راجع السجل أدناه، وجرّب خيار APKEditor إن لزم.');
+    timer = setTimeout(() => poll(d.next), 1200);
+  }).catch(() => { timer = setTimeout(() => poll(since), 2500); });
+}
+
+$('#again').addEventListener('click', () => {
+  clearTimeout(timer);
+  if (jobId) fetch(`/api/jobs/${jobId}`, {method: 'DELETE'});
+  jobId = null; form.reset(); showPicked(); syncMode();
+  $('#result').hidden = true; $('#go').disabled = false;
+  window.scrollTo({top: 0, behavior: 'smooth'});
+});
+syncMode();
+</script>
+</body>
+</html>
